@@ -1,4 +1,2 @@
-﻿// Etapa 4+ — EAN/GTIN validation, MPN normalization, deduplication
-// See docs/parts/ for design reference
-
-export {}
+export * from './gtin.js'
+export * from './mpn.js'

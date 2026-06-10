@@ -1,7 +1,7 @@
 # Current State — Zalisto
 
 **Aktualizováno:** 2026-06-10  
-**Fáze:** Etapa 3 kompletní — extraction pipeline funkční, extract-product worker připojen
+**Fáze:** Etapa 5 kompletní — AI obsah + kategorizace funkční
 
 ## Co existuje a funguje
 
@@ -143,10 +143,81 @@ Stack: cheerio, @zalisto/domain
 - `fetch-source` worker → po DONE enqeueue `extract-product`
 - registrován v `src/index.ts`
 
-## Další krok — Etapa 4
+### `packages/identity` — **Etapa 4 KOMPLETNÍ**
 
-1. `identify-product` worker — EAN validace checksum, MPN normalizace, deduplikace
-2. `packages/identity` — validační logika pro GTIN (Luhn/checksum), MPN cleanup
-3. `generate-content` worker — OpenAI Structured Outputs česká produktová karta
-4. Playwright fallback (`browser-extract`) worker — izolovaný kontejner
-5. Vendor adaptér pro 1-2 pilotní weby
+- `src/gtin.ts` — `validateGtin(raw)` → `{ valid, normalized, type, error }`; GS1 checksum pro EAN-8/EAN-13/GTIN-14; `toGtin14()` padding
+- `src/mpn.ts` — `normalizeMpn()` (strip special chars, lowercase), `normalizeBrand()` (lowercase, collapse whitespace)
+- **17/17 testů PASS** (8 gtin + 6 mpn/brand)
+
+### `packages/database` — rozšíření (Etapa 4)
+
+- `src/helpers/identity.ts` — `insertValidationIssue()`, `updateDraftIdentity()`, `findDraftByGtinInProject()`, `findDraftByBrandMpnInProject()`
+
+### `apps/worker` — `identify-product` worker
+
+- `src/workers/identify-product.ts` — concurrency=5
+  - čte productDraft + fakta, resolves projectId přes join
+  - GTIN checksum → GTIN_INVALID_CHECKSUM (BLOCKER) → status BLOCKED
+  - GTIN conflict v projektu → GTIN_CONFLICT (ERROR) → NEEDS_REVIEW
+  - brand+MPN duplicate → VARIANT_DUPLICATE_MPN (WARNING), pokračuje
+  - normalizuje gtin/brand/mpn na draft, enqueue `generate-content`
+- registrován v `src/index.ts`
+
+### Testy — Etapa 4 (2026-06-10)
+
+- **`packages/identity`** — 17/17 PASS (`gtin.test.ts`: 11 testů, `mpn.test.ts`: 6 testů)
+
+### `packages/ai` — **Etapa 5 KOMPLETNÍ**
+
+Stack: openai ^4.77, zod ^3.23
+
+**Soubory:**
+- `src/openai-gateway.ts` — OpenAI wrapper, zodResponseFormat, retry 3x (429/5xx + exponential backoff), cost tracking (gpt-4o-mini pricing)
+- `src/schemas/content.ts` — `ContentOutputSchema` (titleCs, shortDescriptionCs, longDescriptionCs, bulletPoints, warnings, usedFactIds)
+- `src/schemas/categorization.ts` — `CategorizationOutputSchema` (primaryCategoryId, alternativeCategoryIds, confidence, reason)
+- `src/content-generator.ts` — `generateContent(facts, textStyleConfig)`, anti-injection systémová instrukce
+- `src/categorizer.ts` — `categorizeProduct(product, categories)`, max 200 kategorií v promptu
+
+### `packages/categorization` — **Etapa 5 KOMPLETNÍ**
+
+- `src/format-tree.ts` — `formatCategoryTree(categories, maxItems=200)` — filtruje inactive, truncuje pro token budget
+
+### `packages/database` — rozšíření (Etapa 5)
+
+- `src/helpers/content.ts` — `updateDraftContent()`, `updateDraftCategory()`
+
+### `apps/worker` — Etapa 5 workery
+
+- `src/workers/generate-content.ts` — concurrency=3
+  - načítá selected facts (fallback: všechny fakty)
+  - volá `generateContent()` z `@zalisto/ai`
+  - ukládá title_cs, descriptions, bulletPoints, aiUsedFactIds
+  - varování pokud AI referenced unknown fact ID
+  - enqueue `categorize-product`
+- `src/workers/categorize-product.ts` — concurrency=3
+  - načítá kategorie projektu, confidence threshold
+  - volá `categorizeProduct()` z `@zalisto/ai`
+  - ověřuje, že vrácené ID patří do projektu
+  - pokud confidence < threshold → ValidationIssue WARNING + NEEDS_REVIEW
+  - jinak → READY_FOR_REVIEW
+- Registrovány v `src/index.ts` (5 workerů celkem)
+
+### Testy — Etapa 5 (2026-06-10)
+
+- **`packages/ai`** — 18/18 PASS (`schemas.test.ts`: ContentOutputSchema 10 testů, CategorizationOutputSchema 8 testů)
+- **`packages/categorization`** — 8/8 PASS (`format-tree.test.ts`: filtry, truncation, order, edge cases)
+- **`apps/worker` unit testy** — 17/17 PASS (beze změny; AI workery volají OpenAI, integration testy v Etapě 9)
+
+### Opravené bugy (Etapa 5 review)
+
+- `generate-content.ts` — nesprávně nastavoval status `PROCESSING_IMAGES` hned po AI; odstraněno (status nastavuje `categorize-product`)
+- `categorize-product.ts` — nenačítal pouze aktivní kategorie; přidáno `.filter(c => c.active)`
+- `database/helpers/content.ts` — nepoužitý import `validationIssues`; odstraněn
+- `packages/categorization/package.json` — BOM znak způsoboval crash tsx; fix: UTF-8 bez BOM
+
+## Další krok — Etapa 6
+
+1. `packages/pricing` — deterministický výpočet cen (exchange rate, markup, DPH, rounding)
+2. `calculate-price` worker
+3. `packages/images` — download, MIME check, Sharp → WebP pipeline, S3 upload
+4. `process-images` worker

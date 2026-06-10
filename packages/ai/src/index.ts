@@ -1,4 +1,8 @@
-﻿// Etapa 5+ — OpenAI gateway, prompts, structured output schemas
-// See docs/parts/ for design reference
-
-export {}
+export { callStructured } from './openai-gateway.js'
+export type { CallOptions, CallResult } from './openai-gateway.js'
+export { generateContent } from './content-generator.js'
+export type { ProductFact, TextStyleConfig } from './content-generator.js'
+export { categorizeProduct } from './categorizer.js'
+export type { CategoryNode, ProductSummary } from './categorizer.js'
+export type { ContentOutput } from './schemas/content.js'
+export type { CategorizationOutput } from './schemas/categorization.js'

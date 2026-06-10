@@ -22,6 +22,16 @@ Formát záznamu:
 
 ---
 
+## BOM v package.json — "Error parsing: package.json" v tsx
+
+**Signature:** `Error: Error parsing: C:\...\package.json` při spuštění `npx tsx --test`  
+**Context:** Nový package.json vytvořený přes Claude Code `Write` tool na Windows  
+**Cause:** `Write` tool zapisuje soubory jako UTF-16 LE s BOM (`0xEF 0xBB 0xBF`). Node.js `JSON.parse` na to spadne.  
+**Solution:** Přepsat soubor přes PowerShell bez BOM: `[System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))`  
+**Status:** fixed
+
+---
+
 ## parsePrice — European prices with space thousands separator
 
 **Signature:** Cena `"1 234,56 Kč"` se parsuje jako `1` místo `1234.56`  

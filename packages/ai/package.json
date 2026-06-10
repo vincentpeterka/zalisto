@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "@zalisto/ai",
   "version": "0.0.1",
   "private": true,
@@ -6,7 +6,11 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
-  "scripts": { "build": "tsc", "dev": "tsc --watch" },
-  "dependencies": { "@zalisto/domain": "workspace:*" },
-  "devDependencies": { "typescript": "^5.6.0" }
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "test": "npx tsx --test src/schemas.test.ts" },
+  "dependencies": {
+    "@zalisto/domain": "workspace:*",
+    "openai": "^4.77.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": { "typescript": "^5.6.0", "@types/node": "^22.0.0" }
 }

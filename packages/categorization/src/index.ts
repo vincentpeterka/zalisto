@@ -1,4 +1,2 @@
-﻿// Etapa 5+ — Category tree, AI suggestions, confidence threshold
-// See docs/parts/ for design reference
-
-export {}
+export { formatCategoryTree } from './format-tree.js'
+export type { FlatCategory } from './format-tree.js'
