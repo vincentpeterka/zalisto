@@ -1,7 +1,23 @@
-// Etapa 2+ — BullMQ worker orchestration
-// Queues: fetch-source, extract-product, browser-extract, identify-product,
-//         generate-content, categorize-product, calculate-price, process-images,
-//         validate-product, generate-export
-// Not implemented yet. See docs/parts/03-crawler-extraction.md and docs/instructions/v1.1_plan.md
+import { Redis } from 'ioredis'
+import { env } from './env.js'
+import { startFetchSourceWorker } from './workers/fetch-source.js'
+import { startExtractProductWorker } from './workers/extract-product.js'
 
-console.log('Worker — not yet implemented (Etapa 2+)')
+const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
+
+const workers = [
+  startFetchSourceWorker(redis),
+  startExtractProductWorker(redis),
+]
+
+console.log(`[worker] started ${workers.length} worker(s)`)
+
+const shutdown = async () => {
+  console.log('[worker] shutting down...')
+  await Promise.all(workers.map(w => w.close()))
+  await redis.quit()
+  process.exit(0)
+}
+
+process.on('SIGTERM', shutdown)
+process.on('SIGINT', shutdown)

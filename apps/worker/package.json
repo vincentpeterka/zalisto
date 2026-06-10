@@ -6,13 +6,18 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx --watch src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "npx tsx --test src/lib/fetcher.test.ts"
   },
   "dependencies": {
-    "@zalisto/domain": "workspace:*",
     "@zalisto/database": "workspace:*",
+    "@zalisto/domain": "workspace:*",
+    "@zalisto/extraction": "workspace:^",
+    "@zalisto/storage": "workspace:*",
     "bullmq": "^5.30.1",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.38.3",
+    "ioredis": "^5.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
