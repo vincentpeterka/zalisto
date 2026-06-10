@@ -1,4 +1,4 @@
-﻿// Etapa 6+ — Download, Sharp WebP pipeline, S3 upload
-// See docs/parts/ for design reference
-
-export {}
+export { downloadImage } from './download.js'
+export type { DownloadResult } from './download.js'
+export { processImage } from './process.js'
+export type { ProcessResult } from './process.js'

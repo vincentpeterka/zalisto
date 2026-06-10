@@ -7,6 +7,7 @@ import authPlugin from './plugins/auth.js'
 import orgsPlugin from './plugins/organizations.js'
 import projectsPlugin from './plugins/projects.js'
 import batchesPlugin from './plugins/batches.js'
+import productsPlugin from './plugins/products.js'
 
 export async function createApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const fastify = Fastify({ logger: opts.logger ?? false })
@@ -33,6 +34,7 @@ export async function createApp(opts: { logger?: boolean } = {}): Promise<Fastif
   await fastify.register(orgsPlugin)
   await fastify.register(projectsPlugin)
   await fastify.register(batchesPlugin)
+  await fastify.register(productsPlugin)
 
   return fastify
 }

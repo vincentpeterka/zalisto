@@ -215,9 +215,102 @@ Stack: openai ^4.77, zod ^3.23
 - `database/helpers/content.ts` — nepoužitý import `validationIssues`; odstraněn
 - `packages/categorization/package.json` — BOM znak způsoboval crash tsx; fix: UTF-8 bez BOM
 
-## Další krok — Etapa 6
+### `packages/pricing` — **Etapa 6 KOMPLETNÍ**
 
-1. `packages/pricing` — deterministický výpočet cen (exchange rate, markup, DPH, rounding)
-2. `calculate-price` worker
-3. `packages/images` — download, MIME check, Sharp → WebP pipeline, S3 upload
-4. `process-images` worker
+- `src/calculate.ts` — `calculatePrice(sourcePrice, sourceCurrency, config): PriceCalculationResult`
+  - exchange rate → strip source VAT (if included) → apply margin (MULTIPLIER/FIXED) → add target VAT → round
+  - rounding: TO_9 (psychological pricing), TO_0, UP, DOWN, NONE
+  - returns `{ ok: true, breakdown }` nebo `{ ok: false, reason: 'VAT_STATUS_UNKNOWN'|'NO_PRICE'|'INVALID_CONFIG' }`
+- **15/15 testů PASS** (`calculate.test.ts`)
+
+### `packages/images` — **Etapa 6 KOMPLETNÍ**
+
+- `src/download.ts` — `downloadImage(url)`: fetch s 30s timeout, MIME allowlist (jpeg/png/webp/gif/avif), max 10 MB
+- `src/process.ts` — `processImage(buffer)`: sharp auto-orient → resize max 1600px → WebP q=80 → SHA-256 hash
+- **7/7 testů PASS** (`download.test.ts` — MIME validace)
+
+### `packages/database` — rozšíření (Etapa 6)
+
+- `src/helpers/pricing.ts` — `updateDraftPrice()` (targetPrice, pricingBreakdown, status)
+- `src/helpers/images.ts` — `updateProductImage()`, `updateDraftStatusAfterImages()`
+
+### `apps/worker` — Etapa 6 workery (7 workerů celkem)
+
+- `src/workers/calculate-price.ts` — concurrency=5
+  - čte draft + fakta + projektový `pricingConfig`
+  - VAT_STATUS_UNKNOWN → ValidationIssue BLOCKER → BLOCKED
+  - NO_PRICE → ValidationIssue WARNING, pokračuje na process-images
+  - INVALID_CONFIG → ValidationIssue ERROR, pokračuje
+  - úspěch → uloží targetPrice + breakdown, enqueue `process-images`
+- `src/workers/process-images.ts` — concurrency=3
+  - stáhne každý obrázek z `product_images`, zpracuje přes Sharp
+  - original + WebP nahraje do S3 (`images/{draftId}/{imageId}/original`, `.../webp.webp`)
+  - TOO_SMALL (< 200px) → ValidationIssue WARNING + NEEDS_REVIEW
+  - FAILED image → ValidationIssue WARNING + NEEDS_REVIEW
+  - finální status: READY_FOR_REVIEW nebo NEEDS_REVIEW
+- `categorize-product` upraven: enqeueue `calculate-price` místo nastavení READY_FOR_REVIEW; mezistatus PROCESSING_IMAGES
+
+## Etapa 7 — KOMPLETNÍ (2026-06-10)
+
+### `packages/validation` — KOMPLETNÍ
+
+- `src/types.ts` — `DraftSnapshot`, `FactSnapshot`, `ImageSnapshot`, `ExistingIssue`, `ValidationResult`
+- `src/rules.ts` — `runValidationRules()` — pravidla: MISSING_TITLE (BLOCKER), MISSING_PRICE (ERROR), MISSING_BRAND (WARNING), MISSING_MODEL (WARNING), MISSING_CATEGORY (ERROR), MISSING_DESCRIPTION (WARNING), NO_USABLE_IMAGE (ERROR), RIGHTS_NOT_CONFIRMED (INFO)
+- `src/validate.ts` — `validateDraft()` — agreguje stávající + nové problémy → finalStatus BLOCKED / NEEDS_REVIEW / READY_FOR_REVIEW
+- **9/9 testů PASS** (`validate.test.ts`)
+
+### `apps/worker` — Etapa 7 worker (8 workerů celkem)
+
+- `src/workers/validate-product.ts` — concurrency=5, enqueueován z `process-images`
+  - čte draft + fakta + obrázky + existující issues
+  - volá `validateDraft()` z `@zalisto/validation`
+  - insertuje nové ValidationIssues
+  - finální status: READY_FOR_REVIEW / NEEDS_REVIEW / BLOCKED
+- `process-images` upraven: nestaví finální status sám — enqueueuje `validate-product` se stavem VALIDATING
+
+### `apps/api` — products plugin
+
+Nový plugin `src/plugins/products.ts`:
+```
+GET  /projects/:projectId/products        → seznam s filtrem ?status=
+GET  /products/:draftId                   → detail + facts + images + issues + decisions
+PATCH /products/:draftId/fields           → field override → review_decision
+POST /products/:draftId/approve
+POST /products/:draftId/reject            → body: { note? }
+POST /products/:draftId/reprocess
+POST /projects/:projectId/products/bulk-approve → body: { draftIds[] }
+```
+- Bulk approve: verifikuje READY_FOR_REVIEW status + žádné unresolved BLOCKER issues
+- Approve: blokováno pro produkty ve stavu BLOCKED
+- Field override: ukládá do `review_decisions` (action=FIELD_OVERRIDE, old/new value)
+
+### `apps/web` — Next.js review UI — KOMPLETNÍ
+
+Stack: Next.js 13.5 + React 18, SWR, Babel (SWC disabled pro Node 18.16 kompatibilitu)
+
+**Stránky:**
+- `/login` — přihlašovací formulář
+- `/orgs` — seznam organizací
+- `/orgs/[orgId]` — seznam projektů
+- `/projects/[projectId]` — tabulka produktů (filtry READY/NEEDS_REVIEW/BLOCKED/APPROVED, bulk approve, statistiky)
+- `/products/[draftId]` — 3-panel detail: Zdroj dat | Produkt (editovatelné pole) | Issues + Historie + Metadata
+
+**Funkce review UI:**
+- BLOCKER banner — červeně, nelze schválit
+- Edit pole → PATCH /fields → review_decision
+- Schválit / Zamítnout (s poznámkou) / Znovu zpracovat
+- Hromadné schválení READY_FOR_REVIEW produktů bez BLOCKER issues
+- Zdroj každé hodnoty viditelný (sourceType + confidence)
+- Flash zprávy (ok/err)
+
+**Build poznámka:**
+- `.babelrc` s `next/babel` preset — nutné pro Node 18.16 (SWC segfaultuje)
+- `next.config.js` — CommonJS (`module.exports`, ne ESM `export default`)
+
+## Další krok — Etapa 8
+
+1. `packages/export` — Shoptet XLSX mapping
+2. CSV export
+3. ZIP generátor (XLSX + images/ + reports)
+4. `generate-export` worker
+5. API: `POST /batches/:id/exports`, `GET /exports/:id/download`

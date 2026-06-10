@@ -1,4 +1,4 @@
-import { Worker, type Job } from 'bullmq'
+import { Worker, Queue, type Job } from 'bullmq'
 import { Redis } from 'ioredis'
 import {
   db, productDrafts, productFacts, projects, categories,
@@ -13,6 +13,8 @@ export interface CategorizeProductJobData {
 }
 
 export function startCategorizeProductWorker(connection: Redis) {
+  const calculatePriceQueue = new Queue('calculate-price', { connection })
+
   const worker = new Worker<CategorizeProductJobData>(
     'categorize-product',
     async (job: Job<CategorizeProductJobData>) => {
@@ -48,7 +50,8 @@ export function startCategorizeProductWorker(connection: Redis) {
           severity: 'WARNING',
           message: 'Project has no categories — skipping categorization',
         })
-        await updateDraftCategory(productDraftId, { status: 'READY_FOR_REVIEW' })
+        await updateDraftCategory(productDraftId, { status: 'PROCESSING_IMAGES' })
+        await calculatePriceQueue.add('calculate-price', { sourceItemId, productDraftId })
         return { productDraftId, outcome: 'SKIPPED', reason: 'NO_CATEGORIES' }
       }
 
@@ -84,7 +87,8 @@ export function startCategorizeProductWorker(connection: Redis) {
           message: `AI returned unknown category ID: ${cat.primaryCategoryId}`,
           details: { returnedId: cat.primaryCategoryId },
         })
-        await updateDraftCategory(productDraftId, { status: 'NEEDS_REVIEW' })
+        await updateDraftCategory(productDraftId, { status: 'PROCESSING_IMAGES' })
+        await calculatePriceQueue.add('calculate-price', { sourceItemId, productDraftId })
         return { productDraftId, outcome: 'NEEDS_REVIEW', reason: 'CATEGORY_ID_UNKNOWN' }
       }
 
@@ -100,16 +104,18 @@ export function startCategorizeProductWorker(connection: Redis) {
         await updateDraftCategory(productDraftId, {
           categoryId: cat.primaryCategoryId,
           categoryConfidence: cat.confidence,
-          status: 'NEEDS_REVIEW',
+          status: 'PROCESSING_IMAGES',
         })
+        await calculatePriceQueue.add('calculate-price', { sourceItemId, productDraftId })
         return { productDraftId, outcome: 'NEEDS_REVIEW', reason: 'LOW_CONFIDENCE' }
       }
 
       await updateDraftCategory(productDraftId, {
         categoryId: cat.primaryCategoryId,
         categoryConfidence: cat.confidence,
-        status: 'READY_FOR_REVIEW',
+        status: 'PROCESSING_IMAGES',
       })
+      await calculatePriceQueue.add('calculate-price', { sourceItemId, productDraftId })
 
       return { productDraftId, outcome: 'CATEGORIZED', confidence: cat.confidence }
     },

@@ -5,6 +5,9 @@ import { startExtractProductWorker } from './workers/extract-product.js'
 import { startIdentifyProductWorker } from './workers/identify-product.js'
 import { startGenerateContentWorker } from './workers/generate-content.js'
 import { startCategorizeProductWorker } from './workers/categorize-product.js'
+import { startCalculatePriceWorker } from './workers/calculate-price.js'
+import { startProcessImagesWorker } from './workers/process-images.js'
+import { startValidateProductWorker } from './workers/validate-product.js'
 
 const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
 
@@ -14,6 +17,9 @@ const workers = [
   startIdentifyProductWorker(redis),
   startGenerateContentWorker(redis),
   startCategorizeProductWorker(redis),
+  startCalculatePriceWorker(redis),
+  startProcessImagesWorker(redis),
+  startValidateProductWorker(redis),
 ]
 
 console.log(`[worker] started ${workers.length} worker(s)`)

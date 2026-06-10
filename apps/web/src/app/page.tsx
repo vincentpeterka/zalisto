@@ -1,11 +1,19 @@
-// Etapa 7+ — Next.js Review UI
-// Not implemented yet. See docs/parts/10-review-ui.md
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '../lib/auth-context'
 
 export default function Home() {
-  return (
-    <main>
-      <h1>Zalisto — AI Product Importer</h1>
-      <p>Review UI — not yet implemented (Etapa 7+)</p>
-    </main>
-  )
+  const { user, loading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading) {
+      if (user) router.replace('/orgs')
+      else router.replace('/login')
+    }
+  }, [user, loading, router])
+
+  return null
 }
