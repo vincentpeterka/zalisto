@@ -1,0 +1,108 @@
+services:
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: zalisto
+      POSTGRES_USER: zalisto
+      POSTGRES_PASSWORD: zalisto
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zalisto"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Pre-fill login form
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: pepa-linha-dark
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # MinIO Console UI
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Etapa 1+ ─────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    ports:
+      - "3001:3001"
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql://zalisto:zalisto@postgres:5432/zalisto
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # web:
+  #   build:
+  #     context: ..
+  #     dockerfile: infra/Dockerfile.web
+  #   ports:
+  #     - "3000:3000"
+  #   env_file: ../.env
+  #   depends_on: [api]
+
+  # worker:
+  #   build:
+  #     context: ..
+  #     dockerfile: infra/Dockerfile.worker
+  #   env_file: ../.env
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+
+  # crawler:
+  #   build:
+  #     context: ..
+  #     dockerfile: infra/Dockerfile.crawler
+  #   env_file: ../.env
+  #   network_mode: none  # No internal network access — SSRF isolation
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+volumes:
+  postgres_data:
+  minio_data:

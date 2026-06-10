@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# TypeScript
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Turbo cache
+.turbo/
+
+# Environment — NEVER commit secrets
+.env
+.env.local
+.env.*.local
+# .env.example is intentionally NOT ignored
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# CLI output (spike results)
+result/
+result-*/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Docker volumes (if accidentally created locally)
+postgres_data/
+minio_data/
+
+# Sharp native bindings (rebuilt on install)
+apps/cli/node_modules/.cache/
+
+# Playwright browsers (large, reinstall with playwright install)
+**/playwright/.local-chromium/
+**/playwright/.local-browsers/
+
+# pnpm lock — DO commit this
+# pnpm-lock.yaml
