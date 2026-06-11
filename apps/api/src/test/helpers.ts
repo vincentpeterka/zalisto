@@ -2,6 +2,7 @@ import { type FastifyInstance } from 'fastify'
 import { createApp } from '../app.js'
 
 export async function buildApp(): Promise<FastifyInstance> {
+  process.env['NODE_ENV'] = 'test'
   const app = await createApp({ logger: false })
   await app.ready()
   return app

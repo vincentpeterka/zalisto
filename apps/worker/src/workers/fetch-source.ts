@@ -1,4 +1,5 @@
 import { Worker, Queue, type Job } from 'bullmq'
+import { workerLogger } from '../lib/logger.js'
 import { Redis } from 'ioredis'
 import { db, sourceItems, importBatches } from '@zalisto/database'
 import { eq, sql } from 'drizzle-orm'
@@ -13,6 +14,7 @@ export interface FetchSourceJobData {
 }
 
 export function startFetchSourceWorker(connection: Redis) {
+  const log = workerLogger('fetch-source')
   const extractQueue = new Queue('extract-product', { connection })
 
   const storage = createStorageClient({
@@ -73,7 +75,7 @@ export function startFetchSourceWorker(connection: Redis) {
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[fetch-source] job ${job?.id} failed:`, err.message)
+    log.error({ jobId: job?.id, err }, 'job failed')
   })
 
   return worker

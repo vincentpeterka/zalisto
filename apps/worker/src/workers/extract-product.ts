@@ -1,4 +1,5 @@
 import { Worker, Queue, type Job } from 'bullmq'
+import { workerLogger } from '../lib/logger.js'
 import { Redis } from 'ioredis'
 import { db, sourceItems, productDrafts, insertProductDraftWithFacts } from '@zalisto/database'
 import { eq } from 'drizzle-orm'
@@ -12,6 +13,7 @@ export interface ExtractProductJobData {
 }
 
 export function startExtractProductWorker(connection: Redis) {
+  const log = workerLogger('extract-product')
   const storage = createStorageClient({
     endpoint: env.S3_ENDPOINT,
     bucket: env.S3_BUCKET,
@@ -64,11 +66,11 @@ export function startExtractProductWorker(connection: Redis) {
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[extract-product] job ${job?.id} failed:`, err.message)
+    log.error({ jobId: job?.id, err }, 'job failed')
   })
 
   worker.on('completed', (job, result) => {
-    console.log(`[extract-product] job ${job.id} done — confidence=${result.confidence.toFixed(2)} fallback=${result.needsBrowserFallback}`)
+    log.info(`[extract-product] job ${job.id} done — confidence=${result.confidence.toFixed(2)} fallback=${result.needsBrowserFallback}`)
   })
 
   return worker

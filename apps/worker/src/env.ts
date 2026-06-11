@@ -20,4 +20,6 @@ export const env = {
   S3_SECRET_KEY: process.env['S3_SECRET_KEY'] ?? 'minioadmin',
   S3_REGION: process.env['S3_REGION'] ?? 'us-east-1',
   NODE_ENV: process.env['NODE_ENV'] ?? 'development',
+  SENTRY_DSN: process.env['SENTRY_DSN'] ?? '',
+  LOG_LEVEL: process.env['LOG_LEVEL'] ?? 'info',
 }

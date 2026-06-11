@@ -1,4 +1,5 @@
 import { Worker, type Job } from 'bullmq'
+import { workerLogger } from '../lib/logger.js'
 import { Redis } from 'ioredis'
 import {
   db, productDrafts, productFacts, productImages, validationIssues,
@@ -14,6 +15,7 @@ export interface ValidateProductJobData {
 }
 
 export function startValidateProductWorker(connection: Redis) {
+  const log = workerLogger('validate-product')
   const worker = new Worker<ValidateProductJobData>(
     'validate-product',
     async (job: Job<ValidateProductJobData>) => {
@@ -87,7 +89,7 @@ export function startValidateProductWorker(connection: Redis) {
         .set({ status: finalStatus, updatedAt: sql`now()` })
         .where(eq(productDrafts.id, productDraftId))
 
-      console.log(
+      log.info(
         `[validate-product] draft=${productDraftId} newViolations=${violations.length} status=${finalStatus}`,
       )
 
@@ -97,11 +99,11 @@ export function startValidateProductWorker(connection: Redis) {
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[validate-product] job ${job?.id} failed:`, err.message)
+    log.error({ jobId: job?.id, err }, 'job failed')
   })
 
   worker.on('completed', (job, result) => {
-    console.log(`[validate-product] job ${job.id} done — status=${result.finalStatus}`)
+    log.info(`[validate-product] job ${job.id} done — status=${result.finalStatus}`)
   })
 
   return worker

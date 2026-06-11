@@ -1,4 +1,5 @@
 import { Worker, Queue, type Job } from 'bullmq'
+import { workerLogger } from '../lib/logger.js'
 import { Redis } from 'ioredis'
 import { db, productDrafts, productFacts, projects, sourceItems, importBatches, updateDraftContent, insertValidationIssue } from '@zalisto/database'
 import { eq, and } from 'drizzle-orm'
@@ -10,6 +11,7 @@ export interface GenerateContentJobData {
 }
 
 export function startGenerateContentWorker(connection: Redis) {
+  const log = workerLogger('generate-content')
   const categorizeQueue = new Queue('categorize-product', { connection })
 
   const worker = new Worker<GenerateContentJobData>(
@@ -66,7 +68,7 @@ export function startGenerateContentWorker(connection: Redis) {
       const result = await generateContent(aiInput, textStyleConfig)
       const { data: content, usage } = result
 
-      console.log(
+      log.info(
         `[generate-content] draft=${productDraftId} tokens=${usage.inputTokens}+${usage.outputTokens} cost=$${usage.estimatedCostUsd.toFixed(4)}`,
       )
 
@@ -99,11 +101,11 @@ export function startGenerateContentWorker(connection: Redis) {
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[generate-content] job ${job?.id} failed:`, err.message)
+    log.error({ jobId: job?.id, err }, 'job failed')
   })
 
   worker.on('completed', (job, result) => {
-    console.log(`[generate-content] job ${job.id} done — outcome=${result.outcome}`)
+    log.info(`[generate-content] job ${job.id} done — outcome=${result.outcome}`)
   })
 
   return worker

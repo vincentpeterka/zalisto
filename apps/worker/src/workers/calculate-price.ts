@@ -1,4 +1,5 @@
 import { Worker, Queue, type Job } from 'bullmq'
+import { workerLogger } from '../lib/logger.js'
 import { Redis } from 'ioredis'
 import {
   db, productDrafts, productFacts, projects,
@@ -16,6 +17,7 @@ export interface CalculatePriceJobData {
 }
 
 export function startCalculatePriceWorker(connection: Redis) {
+  const log = workerLogger('calculate-price')
   const processImagesQueue = new Queue('process-images', { connection })
 
   const worker = new Worker<CalculatePriceJobData>(
@@ -92,7 +94,7 @@ export function startCalculatePriceWorker(connection: Redis) {
 
       await processImagesQueue.add('process-images', { sourceItemId, productDraftId })
 
-      console.log(
+      log.info(
         `[calculate-price] draft=${productDraftId} finalPrice=${result.breakdown.finalPrice} ${result.breakdown.targetCurrency}`,
       )
 
@@ -102,11 +104,11 @@ export function startCalculatePriceWorker(connection: Redis) {
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[calculate-price] job ${job?.id} failed:`, err.message)
+    log.error({ jobId: job?.id, err }, 'job failed')
   })
 
   worker.on('completed', (job, result) => {
-    console.log(`[calculate-price] job ${job.id} done — outcome=${result.outcome}`)
+    log.info(`[calculate-price] job ${job.id} done — outcome=${result.outcome}`)
   })
 
   return worker

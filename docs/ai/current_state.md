@@ -307,10 +307,81 @@ Stack: Next.js 13.5 + React 18, SWR, Babel (SWC disabled pro Node 18.16 kompatib
 - `.babelrc` s `next/babel` preset — nutné pro Node 18.16 (SWC segfaultuje)
 - `next.config.js` — CommonJS (`module.exports`, ne ESM `export default`)
 
-## Další krok — Etapa 8
+## Etapa 8 — KOMPLETNÍ (2026-06-11)
 
-1. `packages/export` — Shoptet XLSX mapping
-2. CSV export
-3. ZIP generátor (XLSX + images/ + reports)
-4. `generate-export` worker
-5. API: `POST /batches/:id/exports`, `GET /exports/:id/download`
+### `packages/export` — KOMPLETNÍ
+
+- `src/types.ts` — `ApprovedProduct`, `BlockedProduct`, `SourceReportRow`, `ExportManifest`, `ZipImage`
+- `src/xlsx-builder.ts` — `buildShoptetXlsx()` — ExcelJS, 22 sloupců (Kód, Název, Krátký popis, Popis, Výrobce, Kód výrobce, EAN, Cena s DPH, Sazba DPH, Kategorie, Aktivní, Obrázek 1–10), `SHOPTET_COLUMNS` konstanta
+- `src/csv-builder.ts` — `buildValidationReport()` (blokované produkty), `buildSourceReport()` (mapování URL → produkt)
+- `src/zip-builder.ts` — `buildExportZip()` — JSZip, DEFLATE level 6
+- `src/manifest.ts` — `buildManifest()` — manifest.json s metadaty
+- **9/9 testů PASS** (`xlsx-builder.test.ts`: 7 testů SHOPTET_COLUMNS + buildShoptetXlsx, 2 edge cases)
+
+### DB migrace
+
+- `migrations/0002_export_status.sql` — `storage_key` nullable + `status` TEXT (PENDING/PROCESSING/READY/FAILED)
+- `packages/database/src/schema/review.ts` — `exports` tabulka aktualizována
+- `packages/database/src/helpers/exports.ts` — `insertExportRecord()`, `updateExportRecord()`, `findExportById()`, `findExportsByBatchId()`
+
+### `apps/worker` — `generate-export` worker (9. worker)
+
+- `src/workers/generate-export.ts` — concurrency=2
+  - Načte APPROVED drafty pro batch (JOIN source_items → product_drafts → categories → projects)
+  - Načte BLOCKED drafty pro validation-report
+  - Stáhne WebP z S3, přegeneruje slug-based filenames
+  - `buildShoptetXlsx()` + `buildValidationReport()` + `buildSourceReport()` + `buildExportZip()`
+  - Uploaduje ZIP do S3 `exports/{batchId}/{exportId}.zip`
+  - Po exportu nastavuje status APPROVED draftů na EXPORTED
+  - On failure: aktualizuje export record na FAILED
+
+### `apps/api` — exports plugin
+
+Nový plugin `src/plugins/exports.ts`:
+```
+POST /batches/:batchId/exports         → vytvoří export record (PENDING) + enqueue generate-export → 202
+GET  /batches/:batchId/exports         → seznam exportů pro batch
+GET  /exports/:exportId/download       → signed URL (READY), 202 (PROCESSING), 500 (FAILED)
+```
+
+## Aktuální stav backendu — 9 workerů, 3 API pluginy
+
+Pipeline: fetch-source → extract-product → identify-product → generate-content → categorize-product → calculate-price → process-images → validate-product
+
+Export: `POST /batches/:id/exports` → generate-export worker (mimo pipeline, on-demand)
+
+## Průřezové úkoly — HOTOVO (2026-06-11)
+
+### Strukturované logy — pino
+
+- API: `logger: { level, transport: pino-pretty }` v dev, JSON v prod; LOG_LEVEL env var
+- Worker: `apps/worker/src/lib/logger.ts` — `logger` (root) + `workerLogger(name)` → child logger s `{ worker }` fieldem
+- Všechny `console.log/error/warn` ve workerech nahrazeny `log.info/error/warn`
+
+### BullMQ dashboard — bull-board
+
+- `@bull-board/api` + `@bull-board/fastify` nainstalováno
+- Dostupné na `http://localhost:3001/admin/queues`
+- Všech 9 front zobrazeno (fetch-source → generate-export)
+
+### Sentry
+
+- `@sentry/node` v API i workeru
+- Init podmíněný přítomností `SENTRY_DSN` env var
+- API: `onError` hook → `Sentry.captureException()`
+- Worker: zachytává neočekávané selhání
+
+### README
+
+- `README.md` v kořenu projektu s lokálním spuštěním, env vars, pipeline, strukturou
+
+### Průřezové — stav
+
+- Unit testy (EAN, ceny): ✅ hotovo v Etapě 4 + 6
+- Fixture testy (HTML): ✅ hotovo v Etapě 3 (extraction 28/28)
+- Integrační testy API: ✅ hotovo v Etapě 2 (batches 21/21)
+- E2E test scénář: odkládáme na po pilotu
+
+## Další krok — Etapa 9 (po prvním demu)
+
+Pilotní zákazník, golden dataset 50 produktů, měření čas/náklady.

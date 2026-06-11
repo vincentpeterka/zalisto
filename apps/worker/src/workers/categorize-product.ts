@@ -1,4 +1,5 @@
 import { Worker, Queue, type Job } from 'bullmq'
+import { workerLogger } from '../lib/logger.js'
 import { Redis } from 'ioredis'
 import {
   db, productDrafts, productFacts, projects, categories,
@@ -13,6 +14,7 @@ export interface CategorizeProductJobData {
 }
 
 export function startCategorizeProductWorker(connection: Redis) {
+  const log = workerLogger('categorize-product')
   const calculatePriceQueue = new Queue('calculate-price', { connection })
 
   const worker = new Worker<CategorizeProductJobData>(
@@ -72,7 +74,7 @@ export function startCategorizeProductWorker(connection: Redis) {
 
       const { data: cat, usage } = result
 
-      console.log(
+      log.info(
         `[categorize-product] draft=${productDraftId} confidence=${cat.confidence} tokens=${usage.inputTokens}+${usage.outputTokens}`,
       )
 
@@ -123,11 +125,11 @@ export function startCategorizeProductWorker(connection: Redis) {
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[categorize-product] job ${job?.id} failed:`, err.message)
+    log.error({ jobId: job?.id, err }, 'job failed')
   })
 
   worker.on('completed', (job, result) => {
-    console.log(`[categorize-product] job ${job.id} done — outcome=${result.outcome}`)
+    log.info(`[categorize-product] job ${job.id} done — outcome=${result.outcome}`)
   })
 
   return worker

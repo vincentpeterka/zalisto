@@ -34,8 +34,9 @@ export const exports = pgTable('exports', {
   id:           uuid('id').primaryKey().defaultRandom(),
   batchId:      uuid('batch_id').notNull().references(() => importBatches.id, { onDelete: 'cascade' }),
   format:       text('format', { enum: ['SHOPTET_XLSX','CSV','ZIP'] }).notNull(),
-  storageKey:   text('storage_key').notNull(),
-  productCount: integer('product_count').notNull(),
+  status:       text('status', { enum: ['PENDING','PROCESSING','READY','FAILED'] }).notNull().default('PENDING'),
+  storageKey:   text('storage_key'),
+  productCount: integer('product_count').notNull().default(0),
   createdBy:    uuid('created_by').notNull().references(() => users.id),
   createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

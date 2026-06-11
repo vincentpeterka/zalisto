@@ -1,4 +1,5 @@
 import { Worker, Queue, type Job } from 'bullmq'
+import { workerLogger } from '../lib/logger.js'
 import { Redis } from 'ioredis'
 import {
   db, productDrafts, productImages,
@@ -18,6 +19,7 @@ export interface ProcessImagesJobData {
 const MIN_DIMENSION = 200
 
 export function startProcessImagesWorker(connection: Redis) {
+  const log = workerLogger('process-images')
   const validateQueue = new Queue('validate-product', { connection })
 
   const storage = createStorageClient({
@@ -92,7 +94,7 @@ export function startProcessImagesWorker(connection: Redis) {
           processedCount++
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
-          console.warn(`[process-images] failed image ${image.id}: ${message}`)
+          log.warn(`[process-images] failed image ${image.id}: ${message}`)
 
           await insertValidationIssue({
             productDraftId,
@@ -124,7 +126,7 @@ export function startProcessImagesWorker(connection: Redis) {
 
       await validateQueue.add('validate-product', { sourceItemId: job.data.sourceItemId, productDraftId })
 
-      console.log(
+      log.info(
         `[process-images] draft=${productDraftId} processed=${processedCount} failed=${failedCount} → enqueued validate-product`,
       )
 
@@ -134,11 +136,11 @@ export function startProcessImagesWorker(connection: Redis) {
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[process-images] job ${job?.id} failed:`, err.message)
+    log.error({ jobId: job?.id, err }, 'job failed')
   })
 
   worker.on('completed', (job, result) => {
-    console.log(`[process-images] job ${job.id} done — outcome=${result.outcome}`)
+    log.info(`[process-images] job ${job.id} done — outcome=${result.outcome}`)
   })
 
   return worker

@@ -1,4 +1,5 @@
 import { Worker, Queue, type Job } from 'bullmq'
+import { workerLogger } from '../lib/logger.js'
 import { Redis } from 'ioredis'
 import {
   db,
@@ -21,6 +22,7 @@ export interface IdentifyProductJobData {
 }
 
 export function startIdentifyProductWorker(connection: Redis) {
+  const log = workerLogger('identify-product')
   const generateContentQueue = new Queue('generate-content', { connection })
 
   const worker = new Worker<IdentifyProductJobData>(
@@ -128,11 +130,11 @@ export function startIdentifyProductWorker(connection: Redis) {
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[identify-product] job ${job?.id} failed:`, err.message)
+    log.error({ jobId: job?.id, err }, 'job failed')
   })
 
   worker.on('completed', (job, result) => {
-    console.log(`[identify-product] job ${job.id} done — outcome=${result.outcome}`)
+    log.info(`[identify-product] job ${job.id} done — outcome=${result.outcome}`)
   })
 
   return worker
